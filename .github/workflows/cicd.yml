@@ -1,8 +1,9 @@
-# DOC: https://docs.github.com/en/actions/publishing-packages/publishing-docker-images
-name: Build the app docker image
+name: CI/CD pipeline
 
 on:
-  push
+  push:
+    branches:
+      - master
 
 jobs:
   versioning:
@@ -13,47 +14,121 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      - name: Compute versions
+
+      - name: Compute version and image name
         id: versioning
         run: |
           version=$(git rev-parse --short HEAD)
-          imageName=ghcr.io/${{github.repository}}:$version
-          echo "version=$version" >> $GITHUB_OUTPUT
-          echo "imageName=$imageName" >> $GITHUB_OUTPUT
-          echo "the image name :'$imageName'"
-          echo "## 🔖 New version '$version'" >> $GITHUB_STEP_SUMMARY
-          echo "## 📦 Image '$imageName'" >> $GITHUB_STEP_SUMMARY
+          repository="${GITHUB_REPOSITORY,,}"
+          imageName="ghcr.io/${repository}:${version}"
 
-  build-and-push:
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "imageName=${imageName}" >> "$GITHUB_OUTPUT"
+
+          echo "## New version ${version}" >> "$GITHUB_STEP_SUMMARY"
+          echo "## Image ${imageName}" >> "$GITHUB_STEP_SUMMARY"
+
+  unit-tests:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-
     needs: [versioning]
 
     steps:
       - uses: actions/checkout@v4
-        
-      - run: echo "${{secrets.GITHUB_TOKEN}}" | docker login ghcr.io -u "${{github.actor}}" --password-stdin
-   
-  
-  api-tests:
-    runs-on: ubuntu-latest
-    needs: [build-and-push, versioning]
 
-    # Our API server, running in the background
-    # services:
-    #   backend:
-    #     image: ${{needs.versioning.outputs.imageName}}
-    #     credentials:
-    #       username: ${{github.actor}}
-    #       password: ${{secrets.GITHUB_TOKEN}}
-    #     ports:
-    #     - 8080:8080
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run unit tests
+        run: go test .
+
+  build-and-push:
+    runs-on: ubuntu-latest
+    needs: [versioning, unit-tests]
+    permissions:
+      contents: read
+      packages: write
 
     steps:
       - uses: actions/checkout@v4
-      - name: API tests
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          build-args: |
+            VERSION=${{ needs.versioning.outputs.version }}
+          tags: |
+            ${{ needs.versioning.outputs.imageName }}
+
+  api-tests:
+    runs-on: ubuntu-latest
+    needs: [versioning, build-and-push]
+    permissions:
+      contents: read
+      packages: read
+
+    services:
+      backend:
+        image: ${{ needs.versioning.outputs.imageName }}
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+        ports:
+          - 8080:8080
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Wait for API
         run: |
-          echo "## 🌐 API tests using ${{needs.v.outputs.imageName}}" >> $GITHUB_STEP_SUMMARY
+          for attempt in {1..30}; do
+            if curl --fail --silent http://localhost:8080/ > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+
+          docker logs "${{ job.services.backend.id }}"
+          exit 1
+
+      - name: Run API tests
+        run: go test ./test/apitests
+
+  deploy-dev:
+    runs-on: ubuntu-latest
+    needs: [versioning, api-tests]
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: deploy-dev
+
+      - name: Update deployed version
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          echo "${{ needs.versioning.outputs.version }}" > version.txt
+          git add version.txt
+          git commit -m "Deploy ${{ needs.versioning.outputs.version }}" || exit 0
+          git push origin HEAD:deploy-dev
