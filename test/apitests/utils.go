@@ -2,6 +2,7 @@ package apitests
 
 import "bytes"
 import "encoding/json"
+import "io"
 import "net/http"
 import "time"
 
@@ -20,15 +21,23 @@ var client = &http.Client{Timeout: 10 * time.Second}
 // Wrapper to HTTP API calls, does the error handling and JSON decoding
 func call(method, path string, reqBody any, code *int, result any) error {
 
-	jsonBody, err := json.Marshal(reqBody)
+	var body io.Reader
+	if reqBody != nil {
+		jsonBody, err := json.Marshal(reqBody)
+		if err != nil {
+			return err
+		}
+		body = bytes.NewBuffer(jsonBody)
+	}
+
+	req, err := http.NewRequest(method, baseUrl+path, body)
 	if err != nil {
 		return err
 	}
+	req.Header.Set("Content-Type", "application/json")
 
-	req, _ := http.NewRequest(method, baseUrl + path,  bytes.NewBuffer(jsonBody))
-
-    // send the request
-    res, err := client.Do(req)
+	// send the request
+	res, err := client.Do(req)
 	if err != nil {
 		return err
 	}

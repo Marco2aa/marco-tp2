@@ -56,3 +56,22 @@ func createCat(req *http.Request) (int, any) {
 	Logger.Infof("Cat '%s' saved into the DB", newCatID)
 	return http.StatusCreated, newCatID
 }
+
+// func getCat(req *http.Request) (int, any) {
+// 	catID := req.PathValue("catId")
+
+// 	cat, found := catsDatabase[catID]
+// 	if !found {
+// 		Logger.Infof("Cat '%s' not found", catID)
+// 		return http.StatusNotFound, "Cat not found"
+// 	}
+
+// 	if cat.ID == "" {
+// 		cat.ID = catID
+// 	}
+
+// 	Logger.Infof("Cat '%s' found", catID)
+// 	return http.StatusOK, cat
+// }
+
+

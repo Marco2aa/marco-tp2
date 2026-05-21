@@ -1,0 +1,6 @@
+Unit tests:
+go test .
+
+API tests:
+go run .
+go test ./test/apitests

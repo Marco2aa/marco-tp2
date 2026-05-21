@@ -3,7 +3,7 @@ info:
   title: Cats demo REST API used to manage a local database of 🐈
   version: 1.0.0
 servers:
-- url: ../api
+  - url: ../api
 paths:
   /cats:
     get:
@@ -12,7 +12,7 @@ paths:
           description: Success
       summary: Lists all cats
       tags:
-      - cats
+        - cats
     post:
       summary: Creates a new cat
       requestBody:
@@ -21,21 +21,21 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CatProto'
+              $ref: "#/components/schemas/CatProto"
       responses:
         "201":
           description: Created
       tags:
-      - cats
+        - cats
 
   /cats/{catId}:
     get:
       parameters:
-      - in: path
-        name: catId
-        required: true
-        schema:
-          $ref: '#/components/schemas/CatId'
+        - in: path
+          name: catId
+          required: true
+          schema:
+            $ref: "#/components/schemas/CatId"
       responses:
         "200":
           description: Success
@@ -43,14 +43,14 @@ paths:
           description: Not found
       summary: Gets a cat details
       tags:
-      - cats
+        - cats
     delete:
       parameters:
-      - in: path
-        name: catId
-        required: true
-        schema:
-          $ref: '#/components/schemas/CatId'
+        - in: path
+          name: catId
+          required: true
+          schema:
+            $ref: "#/components/schemas/CatId"
       responses:
         "204":
           description: The ref was deleted
@@ -58,7 +58,7 @@ paths:
           description: Not found
       summary: Deletes a cat
       tags:
-      - cats
+        - cats
 
 components:
   schemas:
